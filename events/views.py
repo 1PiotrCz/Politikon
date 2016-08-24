@@ -1,7 +1,7 @@
 import json
 import logging
 
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db import transaction
 from django.http import Http404, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404
@@ -188,3 +188,33 @@ def bets_viewed(request):
         bets_resolved.append(bet_id)
 
     return JSONResponse(json.dumps(bets_resolved))
+
+
+@user_passes_test(lambda u: u.is_staff)
+@require_http_methods(["POST"])
+@csrf_exempt
+@transaction.atomic
+def resolve_event(request, event_id):
+    """
+    Vote for yes or no
+    :param request:
+    :type request: WSGIRequest
+    :param event_id: event id
+    :type event_id: int
+    :return:
+    """
+    data = json.loads(request.body)
+    try:
+        vote_result = Event.objects.vote_for_solution(request.user, event_id, data['outcome'])
+    except EventNotInProgress as e:
+        result = {
+            'error': unicode(e.message.decode('utf-8')),
+        }
+
+        return JSONResponseBadRequest(json.dumps(result))
+
+    result = {
+        'updates': vote_result
+    }
+
+    return JSONResponse(json.dumps(result))
